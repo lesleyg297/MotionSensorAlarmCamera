@@ -1,0 +1,120 @@
+# Will be used to use PIR sensor and buzzer
+from gpiozero import MotionSensor, Buzzer
+# Will be used to use camera
+from picamera import PiCamera
+# Will be used to return start time, end time, and elapsed time
+import time
+from datetime import datetime
+from time import sleep
+# Will be used to send email, attach images, videos, and texts.
+import smtplib
+from email.mime.multipart import MIMEMultipart
+from email.mime.image import MIMEImage
+from email.mime.text import MIMEText
+from email import encoders
+
+### Overall, this gives me access to the sensor, buzzer, and camera. Also improves camera quality.
+# Pin number 4
+PIR = MotionSensor(4)
+# Pin number 15
+buzzer = Buzzer(15)
+# Access to camera
+camera = PiCamera()
+#inpt = int(input('Camera Rotation in Degrees: '))
+camera.rotation = 90
+# Improves camera quality
+camera.meter_mode = 'average'
+camera.framerate = 25
+camera.resolution = (700, 400)
+
+### Overall, it loops and waits for motion and prints when there is something detected. Saves picture and video during movement
+while True:
+    # Waits for motion
+    PIR.wait_for_motion()
+    # Can subtract for elapsed time when it's on datetime.now()
+    strt_sub = datetime.now()
+    # Nicer time format. This will be used for email and printing purposes
+    strt = time.ctime(time.time())
+    print('Motion has been detected!')
+    # Instructs buzzer to ring as soon as the motion is detected
+    buzzer.beep()
+    # Captures a picture as the motion is detected
+    camera.capture('intruder_image.png')
+    # Records a video for the duration of the movement
+    print('Intruder Alert!')
+    # Waits for no motion
+    PIR.wait_for_no_motion()
+    # Stops recording when no more motion is deteched
+    print('Motion has stopped')
+    # Will be used for elapsed time
+    end_sub = datetime.now()
+    # Nicer time format for emails and print
+    end = time.ctime(time.time())
+    # Turns buzzer of when there is no more motion
+    buzzer.off()
+    
+    ### Overall, prints out time stamps and tells the user that the video will be converted
+    print('\nIntruder Time Stamp')
+    print('Start time:', strt)
+    print('End Time:', end)
+    print('Elapsed Time: ', end_sub-strt_sub)
+
+    ### Overall, prepares to send email and attaches text that will be in email
+    print('Now Sending Email...')
+    # Used for multiple texts and attachments which the email will have
+    eml = MIMEMultipart()
+    # Encodes from line and to line on Gmail emails
+    eml['From'] = "insert_email"
+    eml['To'] = "insert_email"
+    # Defines subject line
+    eml['Subject'] = 'Intruder Alert!!!'
+    # I used HTML format to use variables during the time stamp more easily. It looks better too.
+    # In HTML <!--text--> is a comment
+    body = """\
+    <!--begins html-->
+    <html>
+       <!--Not necessary. Ignores head-->
+       <head></head>
+       <body>
+       <!--Started a paragraph and included a newline-->
+        <p> Hello,<br><br>
+        There was an intruder detected. Picture of intruder is attached. Please check these attachments immediately.<br>
+         <br>Time Stamps-
+         <br>Start Time:
+         """ + str(strt)+"""<br>End Time: """+str(end)+"""<br>Elapsed Time: """+str(end_sub-strt_sub)+"""<br><br>Best,<br>
+         Your Raspberry Pi
+        <!--ends paragragh-->
+        </p>
+       <!--ends body-->
+       </body>
+    <!--end html-->
+    </html>
+    """
+    # MIME object that is HTML styled text.
+    msg = MIMEText(body, 'html')
+    # Attaches text to email
+    eml.attach(msg)
+    
+    ### Overall, this attaches the image we took when motion started
+    print('Attaching Picture...')
+    # Opens the image file in binary format
+    infile = open('intruder_image.png', 'rb')
+    # Contains raw image data and determines the subtype. Opened image file was read
+    infile = MIMEImage(infile.read())
+    # Header setting. Since it's currently in binary format(non-ASCII), it needs to controlled. Defines name of file in email.
+    infile.add_header('Content-Disposition','attachment', filename = 'intruder_image.png')
+    # Attaches the image to email
+    eml.attach(infile)
+
+    ### Overall, this actually sends the email and gives access to my email account
+    # Google SMTP server connection. smtp.gmail.com is an outgoing SMTP server while 587 is the port that must be used for TLS secure connections.
+    srv = smtplib.SMTP('smtp.gmail.com:587')
+    # Secure connection in TLS mode
+    srv.starttls()
+    # Logs me in to my email. Includes email address and generated an app password
+    srv.login("insert_email", "insert_password")
+    # Send email and returns emails text and message as a string
+    srv.sendmail("insert_email_from", "insert_email_to", eml.as_string())
+    # Quits server
+    srv.quit()
+    print('Email has been sent\n\n')
